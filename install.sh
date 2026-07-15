@@ -1,47 +1,22 @@
 #!/bin/bash
-# GirinLog 메뉴바 앱 설치 스크립트
-# 사용법: curl -fsSL https://raw.githubusercontent.com/my-girin-log/girin-log-menubar-releases/main/install.sh | bash
-set -euo pipefail
+# GirinLog 메뉴바 앱 설치: curl -fsSL https://raw.githubusercontent.com/my-girin-log/girin-log-menubar-releases/main/install.sh | bash
+set -e
 
-REPO="my-girin-log/girin-log-menubar-releases"
-APP_PATH="/Applications/GirinLog.app"
+cd /tmp
+rm -rf girinlog.zip girinlog-extract
 
-echo "🦒 GirinLog 설치를 시작합니다..."
+# 다운로드가 실패하면 여기서 즉시 중단되어, 실행 중이던 기존 앱은 그대로 유지된다
+curl -fL -o girinlog.zip "https://github.com/my-girin-log/girin-log-menubar-releases/releases/latest/download/GirinLog-latest-arm64-mac.zip"
 
-# 최신 릴리즈의 mac.zip URL 찾기 (릴리즈 목록은 최신순)
-ZIP_URL=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=5" \
-  | grep -o '"browser_download_url": *"[^"]*-mac\.zip"' \
-  | head -1 | sed 's/.*"\(https[^"]*\)"/\1/')
+# 실행 중인 앱을 확실히 종료 (일반 quit + 강제 종료 둘 다 시도)
+osascript -e 'tell application "GirinLog" to quit' 2>/dev/null || true
+pkill -f "GirinLog.app/Contents/MacOS" 2>/dev/null || true
+sleep 1
 
-if [ -z "$ZIP_URL" ]; then
-  echo "❌ 최신 릴리즈를 찾지 못했습니다. https://github.com/${REPO}/releases 를 확인해주세요."
-  exit 1
-fi
-echo "⬇️  다운로드: $ZIP_URL"
+rm -rf /Applications/GirinLog.app
+ditto -xk girinlog.zip girinlog-extract
+mv girinlog-extract/GirinLog.app /Applications/
+xattr -cr /Applications/GirinLog.app
+rm -rf girinlog.zip girinlog-extract
 
-WORK_DIR=$(mktemp -d /tmp/girinlog-install-XXXXXX)
-trap 'rm -rf "$WORK_DIR"' EXIT
-curl -fL --progress-bar -o "$WORK_DIR/GirinLog.zip" "$ZIP_URL"
-
-echo "📦 압축 해제 중..."
-/usr/bin/ditto -xk "$WORK_DIR/GirinLog.zip" "$WORK_DIR/extracted"
-
-# 실행 중이면 종료
-if pgrep -f "GirinLog.app/Contents/MacOS" > /dev/null 2>&1; then
-  echo "🔄 실행 중인 GirinLog를 종료합니다..."
-  osascript -e 'quit app "GirinLog"' 2>/dev/null || true
-  sleep 1
-  pkill -f "GirinLog.app/Contents/MacOS" 2>/dev/null || true
-  sleep 1
-fi
-
-# 기존 설치 교체
-rm -rf "$APP_PATH"
-mv "$WORK_DIR/extracted/GirinLog.app" "$APP_PATH"
-
-# 격리 속성 제거 (curl 다운로드에는 원래 안 붙지만 만약을 위해)
-xattr -dr com.apple.quarantine "$APP_PATH" 2>/dev/null || true
-
-echo "✅ 설치 완료! 앱을 실행합니다."
-open "$APP_PATH"
-echo "메뉴 막대에서 기린 아이콘을 눌러 메모를 시작해보세요."
+open /Applications/GirinLog.app
